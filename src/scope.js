@@ -2,69 +2,78 @@ import isObject from 'lodash.isobject';
 import { Component, PropTypes } from 'react';
 
 const storeShape = PropTypes.shape({
-  subscribe: PropTypes.func.isRequired,
   dispatch: PropTypes.func.isRequired,
-  getState: PropTypes.func.isRequired
+  getState: PropTypes.func.isRequired,
+  subscribe: PropTypes.func.isRequired,
 });
 
-const scope = (createScopeStore) => (WrappedComponent) => {
-  const scopeStore = createScopeStore();
+const defaultMergeState = (parentState, scopeState) => {
+  if (isObject(scopeState)) {
+    const mergedState = {
+      ...parentState,
+      ...scopeState,
+    };
 
-  class Scope extends Component {
-    getChildContext() {
-      const scopeDispatch = scopeStore.dispatch;
-      const scopeGetState = scopeStore.getState;
+    return mergedState;
+  } else {
+    return scopeState;
+  }
+};
 
-      scopeStore.dispatch = (...params) => {
-        const parentDispatchResult = this.context.store.dispatch(...params);
-        const scopeDispatchResult = scopeDispatch(...params);
+class Scope extends Component {
+  static defaultProps = {
+    mergeState: defaultMergeState,
+  };
+
+  getChildContext() {
+    const scopeStore = this.getStore();
+
+    return {
+      store: scopeStore,
+    };
+  }
+
+  getStore() {
+    const { context, props } = this;
+
+    return {
+      ...context.store,
+      dispatch: (...params) => {
+        const parentDispatchResult = context.store.dispatch(...params);
+        const scopeDispatchResult = props.store ? props.store.dispatch(...params) : undefined;
 
         if (scopeDispatchResult) {
           return scopeDispatchResult;
         } else {
           return parentDispatchResult;
         }
-      };
+      },
+      getState: (...params) => {
+        const parentState = context.store.getState(...params);
+        const scopeState = props.store ? props.store.getState(...params) : undefined;
 
-      scopeStore.getState = (...params) => {
-        const parentState = this.context.store.getState(...params);
-        const scopeState = scopeGetState(...params);
-
-        if (isObject(scopeState)) {
-          const mergedState = {
-            ...parentState,
-            ...scopeState,
-          };
-
-          return mergedState;
-        } else {
-          return scopeState;
-        }
-      };
-
-      return {
-        store: scopeStore,
-      };
-    }
-
-    render() {
-      return (
-        <WrappedComponent
-          {...this.props}
-        />
-      );
-    }
+        return props.mergeState(parentState, scopeState);
+      },
+    };
   }
 
-  Scope.contextTypes = {
-    store: storeShape.isRequired,
-  };
-
-  Scope.childContextTypes = {
-    store: storeShape.isRequired,
-  };
-
-  return Scope;
+  render() {
+    return this.props.children;
+  }
 }
 
-export default scope;
+Scope.propTypes = {
+  children: PropTypes.element.isRequired,
+  store: storeShape,
+  mergeState: PropTypes.func.isRequired,
+};
+
+Scope.contextTypes = {
+  store: storeShape.isRequired,
+};
+
+Scope.childContextTypes = {
+  store: storeShape.isRequired,
+};
+
+export default Scope;

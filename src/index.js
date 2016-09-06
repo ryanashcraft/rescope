@@ -1,1 +1,1 @@
-export { default as scope } from './scope';
+export { default as Scope } from './Scope';
